@@ -2,50 +2,62 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = "us-east-1"
-        ECR_REPO = "123456789012.dkr.ecr.us-east-1.amazonaws.com/simple-devops-app"
-        IMAGE_TAG = "latest"
+        AWS_ACCOUNT_ID = "625834966565"
+        AWS_REGION = "ap-southeast-1"
+        ECR_REPO = "k8project-latest"
+        IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
     stages {
 
-        stage('Clone Repo') {
+        stage('Checkout') {
             steps {
-                git 'https://github.com/yourusername/simple-devops-app.git'
+                git 'https://github.com/Jagannath-bite/k8project.git'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t simple-app .'
+                sh 'docker build -t $ECR_REPO:$IMAGE_TAG .'
             }
         }
 
         stage('Login to ECR') {
             steps {
                 sh '''
-                aws ecr get-login-password --region $AWS_REGION \
-                | docker login --username AWS --password-stdin $ECR_REPO
+                aws ecr get-login-password --region $AWS_REGION | \
+                docker login --username AWS --password-stdin \
+                $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
                 '''
             }
         }
 
         stage('Tag Image') {
             steps {
-                sh 'docker tag simple-app:latest $ECR_REPO:$IMAGE_TAG'
+                sh '''
+                docker tag $ECR_REPO:$IMAGE_TAG \
+                $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
+                '''
             }
         }
 
-        stage('Push to ECR') {
+        stage('Push Image') {
             steps {
-                sh 'docker push $ECR_REPO:$IMAGE_TAG'
+                sh '''
+                docker push \
+                $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO:$IMAGE_TAG
+                '''
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Deploy to EKS') {
             steps {
-                sh 'kubectl apply -f k8s/'
+                sh '''
+                sed -i "s/latest/$IMAGE_TAG/g" k8s/deployment.yaml
+                kubectl apply -f k8s/
+                '''
             }
         }
+
     }
 }
